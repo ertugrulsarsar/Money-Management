@@ -1,0 +1,67 @@
+[
+  {
+    "id": "28db0173-1830-4b2e-8bbd-aaebe4f36162",
+    "name": "Maaş",
+    "transaction_type": "Gelir"
+  },
+  {
+    "id": "1b1614be-4652-47c2-a25c-739965fa5147",
+    "name": "Yatırım",
+    "transaction_type": "Gelir"
+  },
+  {
+    "id": "fdf8dad7-773e-4217-bf0f-b437c0d1d952",
+    "name": "Hediye",
+    "transaction_type": "Gelir"
+  },
+  {
+    "id": "c9d895d1-8946-47b3-9a12-0178bdce4485",
+    "name": "Diğer Gelir",
+    "transaction_type": "Gelir"
+  },
+  {
+    "id": "db5d10f1-68b0-4f1b-83ef-1dbf1b1735cb",
+    "name": "Yemek",
+    "transaction_type": "Gider"
+  },
+  {
+    "id": "e31703fc-59bd-4a3f-bf14-901fe6ec87ff",
+    "name": "Kira",
+    "transaction_type": "Gider"
+  },
+  {
+    "id": "35a04d82-c50f-438b-ae62-0b9ed7f2e0fd",
+    "name": "Faturalar",
+    "transaction_type": "Gider"
+  },
+  {
+    "id": "b952e049-53f1-4fb2-b877-e82e54ba9890",
+    "name": "Ulaşım",
+    "transaction_type": "Gider"
+  },
+  {
+    "id": "08b7c39b-23c0-4b92-bd7e-280808eb13f5",
+    "name": "Eğlence",
+    "transaction_type": "Gider"
+  },
+  {
+    "id": "a7c57d2d-71da-424d-8de2-0503f54901c1",
+    "name": "Alışveriş",
+    "transaction_type": "Gider"
+  },
+  {
+    "id": "ff078aff-ce29-49f4-8b32-9263e788304c",
+    "name": "Sağlık",
+    "transaction_type": "Gider"
+  },
+  {
+    "id": "1e9682b5-b4ec-4796-a374-43de7330a1b7",
+    "name": "Eğitim",
+    "transaction_type": "Gider"
+  },
+  {
+    "id": "7b3b649d-2028-4f4e-8406-2a1bd253cb68",
+    "name": "Diğer Gider",
+    "transaction_type": "Gider"
+  }
+]

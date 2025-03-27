@@ -1,0 +1,50 @@
+[
+  {
+    "id": "f233cc6a-4af6-4f95-8686-f0ee4f826928",
+    "amount": 99990.01,
+    "category": "Maaş",
+    "description": "Maaş",
+    "date": "2025-03-22",
+    "transaction_type": "Gelir"
+  },
+  {
+    "id": "90cb4350-a633-4aac-888c-3be5cad95eae",
+    "amount": 300.0,
+    "category": "Faturalar",
+    "description": "Elektrik Faturası",
+    "date": "2025-03-22",
+    "transaction_type": "Gider"
+  },
+  {
+    "id": "fd805853-0b87-49e1-9f0c-82f88713d43e",
+    "amount": 12000.0,
+    "category": "Yemek",
+    "description": "Dışarıdan Yemek",
+    "date": "2025-03-22",
+    "transaction_type": "Gider"
+  },
+  {
+    "id": "f9afc72a-78e0-4978-9872-b04118b678f2",
+    "amount": 25000.0,
+    "category": "Kira",
+    "description": "Ev kira",
+    "date": "2025-03-22",
+    "transaction_type": "Gider"
+  },
+  {
+    "id": "dbc3c9a1-2793-4feb-bfc8-243c60df7d25",
+    "amount": 20000.0,
+    "category": "Alışveriş",
+    "description": "Giyece, Elektronik vs.",
+    "date": "2025-03-22",
+    "transaction_type": "Gider"
+  },
+  {
+    "id": "dd2bb2f5-e64b-45a3-94f4-03c12da097e7",
+    "amount": 4000.0,
+    "category": "Ulaşım",
+    "description": "Yakıt",
+    "date": "2025-03-22",
+    "transaction_type": "Gider"
+  }
+]

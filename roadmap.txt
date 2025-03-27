@@ -1,0 +1,127 @@
+KIŞİSEL FİNANS YÖNETİM SİSTEMİ YOL HARİTASI (STREAMLIT VERSİYONU)
+===============================================================
+
+1. FAZ: TEMEL ALTYAPI (1-2 Hafta)
+--------------------------------
+A. Veritabanı Yapısı
+   - SQLite kurulumu (Streamlit ile kolay entegrasyon)
+   - Temel tabloların oluşturulması (users, transactions, budgets, goals)
+   - Pandas DataFrame entegrasyonu
+
+B. Streamlit Uygulama Yapısı
+   - Çoklu sayfa yapısı (pages/)
+   - Session state yönetimi
+   - Temel UI bileşenleri
+   - Responsive tasarım
+
+2. FAZ: TEMEL ÖZELLİKLER (2-3 Hafta)
+----------------------------------
+A. Gelir-Gider Yönetimi
+   - Streamlit form bileşenleri ile veri girişi
+   - Pandas ile veri analizi
+   - Plotly ile görselleştirme
+   - Fatura hatırlatıcıları (Streamlit notifications)
+
+B. Bütçe Planlama
+   - Altair/Plotly ile bütçe grafikleri
+   - Streamlit slider ve input bileşenleri
+   - Bütçe limitleri ve uyarılar
+   - Bütçe raporları
+
+3. FAZ: GELİŞMİŞ ÖZELLİKLER (3-4 Hafta)
+-------------------------------------
+A. Yatırım Yönetimi
+   - yfinance ile hisse senedi verileri
+   - Streamlit caching ile performans optimizasyonu
+   - Portföy yönetimi
+   - Yatırım performans analizi
+
+B. Hedef Planlama
+   - Streamlit progress bar ile hedef takibi
+   - Plotly ile hedef grafikleri
+   - Otomatik tasarruf önerileri
+
+4. FAZ: ANALİZ VE RAPORLAMA (2-3 Hafta)
+-------------------------------------
+A. Raporlama Sistemi
+   - Streamlit metrics ile özet bilgiler
+   - Plotly ile detaylı grafikler
+   - Pandas ile veri analizi
+   - PDF export özelliği
+
+B. Analitik Özellikler
+   - Streamlit caching ile hızlı analiz
+   - Prophet ile tahminleme
+   - Trend analizi
+
+5. FAZ: ENTEGRASYONLAR (2-3 Hafta)
+--------------------------------
+A. Bankacılık Entegrasyonları
+   - API entegrasyonları
+   - Streamlit caching ile veri yönetimi
+   - Çoklu hesap yönetimi
+
+B. OCR ve AI Özellikleri
+   - Streamlit file uploader ile fatura yükleme
+   - Tesseract OCR entegrasyonu
+   - Basit AI önerileri
+
+6. FAZ: KULLANICI DENEYİMİ (2-3 Hafta)
+------------------------------------
+A. UI/UX İyileştirmeleri
+   - Streamlit themes
+   - Custom CSS
+   - Responsive tasarım
+   - Sidebar navigasyonu
+
+B. Bildirim Sistemi
+   - Streamlit notifications
+   - Email entegrasyonu
+   - Bildirim tercihleri
+
+7. FAZ: OPTİMİZASYON (2 Hafta)
+----------------------------
+A. Performans İyileştirmeleri
+   - Streamlit caching optimizasyonu
+   - Veri yapısı optimizasyonu
+   - Sayfa yükleme hızı iyileştirmeleri
+
+B. Kod Kalitesi
+   - Modüler yapı
+   - Kod organizasyonu
+   - Error handling
+
+8. FAZ: DEPLOYMENT VE GÜVENLİK (2 Hafta)
+-------------------------------------
+A. Deployment
+   - Streamlit Cloud deployment
+   - Docker containerization
+   - CI/CD pipeline
+
+B. Güvenlik
+   - Kullanıcı kimlik doğrulama
+   - Veri şifreleme
+   - Güvenli veri saklama
+
+TEKNOLOJİ STACK
+--------------
+- Frontend & Backend: Streamlit
+- Veri Analizi: Pandas
+- Görselleştirme: Plotly/Altair
+- Veritabanı: SQLite
+- Deployment: Streamlit Cloud
+- Ek Kütüphaneler: 
+  - yfinance (yatırım verileri)
+  - prophet (tahminleme)
+  - pytesseract (OCR)
+  - python-jose (JWT)
+
+ÖNCELİKLİ GÖREVLER
+-----------------
+1. Streamlit proje yapısının oluşturulması
+2. Veritabanı şemasının kurulması
+3. Ana sayfa ve navigasyon yapısının oluşturulması
+4. Temel veri giriş formlarının hazırlanması
+
+NOT: Her fazın sonunda bir demo ve kod incelemesi yapılacaktır.
+Toplam geliştirme süresi: 16-22 hafta 
