@@ -1,336 +1,510 @@
 import streamlit as st
-import os
 import pandas as pd
-from models.database import init_db, get_db, Transaction, Budget, FinancialGoal
-from services.database_service import DatabaseService
-from services.auth_service import AuthService
 from datetime import datetime, timedelta
-from datetime import date as dt_date
-import plotly.express as px
-import plotly.graph_objects as go
-from plotly.subplots import make_subplots
-from typing import List
-
-from models.finance_manager import FinanceManager
-from models.transaction import TransactionType
-from models.category_manager import CategoryManager
-from components.transaction_form import render_transaction_form
-from components.transaction_list import render_transaction_list
-from components.analysis import render_analysis
-from components.category_manager_ui import render_category_manager
-from config.settings import APP_TITLE, APP_ICON, APP_DESCRIPTION, DATA_FILE
-from config.settings import PRIMARY_COLOR, BACKGROUND_COLOR, SECONDARY_BACKGROUND_COLOR, TEXT_COLOR
-from services.report_service import ReportService
-from services.notification_service import NotificationService
+import numpy as np
+import json
+import time
+from utils.db import init_db
+from services.transaction_service import TransactionService
 from services.budget_service import BudgetService
-from utils.data_generator import DataGenerator
-from utils.logger import FinanceLogger
+from services.category_service import CategoryService
+from services.goal_service import GoalService
+from components.sidebar import create_sidebar
+from components.notification_center import show_notification_center
+from utils.format import format_currency
+from utils.config import PRIMARY_COLOR, SECONDARY_COLOR, ACCENT_COLOR
 
-# Tema renkleri
-PRIMARY_COLOR = "#1f77b4"
-SECONDARY_COLOR = "#ff7f0e"
-BACKGROUND_COLOR = "#f8f9fa"
-CARD_BACKGROUND = "#ffffff"
-TEXT_COLOR = "#2c3e50"
+# Sayfa yapılandırması
+st.set_page_config(
+    page_title="Kişisel Finans",
+    page_icon="💰",
+    layout="wide",
+    initial_sidebar_state="expanded",
+    menu_items={
+        'About': 'Kişisel Finans yönetim uygulaması'
+    }
+)
+
+# JavaScript kodlarını enjekte et
+st.markdown("""
+<script>
+// Sayfa navigasyonu için yardımcı fonksiyon
+function navigateTo(path, pageName) {
+    console.log('navigateTo called with', path, pageName);
+    
+    // Session state'i güncelle
+    window.parent.postMessage(
+        {
+            type: 'streamlit:setSessionState',
+            state: { page: pageName }
+        },
+        '*'
+    );
+    
+    // URL'yi değiştir
+    setTimeout(function() {
+        console.log('Navigating to:', path);
+        window.parent.location.href = path;
+    }, 100);
+    
+    return false;
+}
+
+// Sayfa yüklendiğinde tüm bağlantıları bul ve onlara tıklama olay dinleyicileri ekle
+document.addEventListener('DOMContentLoaded', function() {
+    console.log('DOM fully loaded');
+    
+    // Tüm sidebar bağlantılarını bul
+    setTimeout(function() {
+        const sidebarLinks = document.querySelectorAll('.sidebar-menu-item');
+        console.log('Found sidebar links:', sidebarLinks.length);
+        
+        sidebarLinks.forEach(function(link) {
+            link.addEventListener('click', function(e) {
+                e.preventDefault();
+                const path = this.getAttribute('data-path');
+                const pageName = this.getAttribute('data-page');
+                console.log('Link clicked:', path, pageName);
+                navigateTo(path, pageName);
+            });
+        });
+    }, 1000);
+});
+</script>
+""", unsafe_allow_html=True)
 
 def setup_page():
-    """Sayfa yapılandırmasını ayarlar."""
+    """Sayfa yapılandırmasını yapar."""
+    # Temel sayfa ayarları
     st.set_page_config(
-        page_title="Kişisel Finans Yönetimi",
+        page_title="Kişisel Finans | Ana Sayfa",
         page_icon="💰",
         layout="wide",
         initial_sidebar_state="expanded"
     )
     
-    # CSS ile tema özelleştirmesi
-    st.markdown(f"""
-    <style>
-        .stApp {{
-            background-color: #f8f9fa;
-            color: #2c3e50;
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-        }}
-        .stButton button {{
-            background-color: #3498db;
-            color: white;
-            border-radius: 8px;
-            padding: 0.5rem 1.5rem;
-            border: none;
-            transition: all 0.3s ease;
-            font-weight: 500;
-        }}
-        .stButton button:hover {{
-            background-color: #2980b9;
-            transform: translateY(-2px);
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-        }}
-        .stSidebar .sidebar-content {{
-            background-color: #ffffff;
-            border-right: 1px solid #e0e0e0;
-        }}
-        .stMetric {{
-            background-color: #ffffff;
-            border-radius: 12px;
-            padding: 20px;
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-            margin: 10px 0;
-        }}
-        .metric-label {{
-            font-size: 1.2em;
-            font-weight: 600;
-            color: #2c3e50;
-        }}
-        .metric-value {{
-            font-size: 2em;
-            font-weight: 700;
-            color: #3498db;
-        }}
-        .stTabs [data-baseweb="tab-list"] {{
-            gap: 8px;
-        }}
-        .stTabs [data-baseweb="tab"] {{
-            height: 50px;
-            white-space: pre-wrap;
-            border-radius: 8px 8px 0px 0px;
-            padding: 10px 16px;
-            background-color: #ffffff;
-            border: 1px solid #e0e0e0;
-            font-weight: 500;
-        }}
-        .stTabs [aria-selected="true"] {{
-            background-color: #3498db;
-            color: white;
-            border: none;
-        }}
-        .stForm {{
-            background-color: #ffffff;
-            padding: 20px;
-            border-radius: 12px;
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-        }}
-        .stDataFrame {{
-            background-color: #ffffff;
-            border-radius: 12px;
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-        }}
-        .stSelectbox, .stTextInput, .stNumberInput {{
-            background-color: #ffffff;
-            border-radius: 8px;
-            border: 1px solid #e0e0e0;
-        }}
-        .stSelectbox:focus, .stTextInput:focus, .stNumberInput:focus {{
-            border-color: #3498db;
-            box-shadow: 0 0 0 2px rgba(52, 152, 219, 0.2);
-        }}
-        .notification-container {{
-            max-height: 300px;
-            overflow-y: auto;
-            padding: 10px;
-            background-color: #ffffff;
-            border-radius: 12px;
-            margin-bottom: 20px;
-        }}
-        .notification-item {{
-            padding: 10px;
-            margin-bottom: 10px;
-            border-radius: 8px;
-            border-left: 4px solid #3498db;
-        }}
-        .notification-item.error {{
-            border-left-color: #e74c3c;
-            background-color: #fde8e8;
-        }}
-        .notification-item.warning {{
-            border-left-color: #f1c40f;
-            background-color: #fff8e8;
-        }}
-        .notification-item.info {{
-            border-left-color: #3498db;
-            background-color: #e8f4f8;
-        }}
-        .menu-item {{
-            padding: 12px;
-            margin: 5px 0;
-            border-radius: 8px;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            font-weight: 500;
-        }}
-        .menu-item:hover {{
-            background-color: #3498db;
-            color: white;
-            transform: translateX(5px);
-        }}
-        .menu-item.active {{
-            background-color: #3498db;
-            color: white;
-        }}
-        h1 {{
-            color: #2c3e50;
-            font-weight: 700;
-            font-size: 2.5em;
-            margin-bottom: 1em;
-        }}
-        h2 {{
-            color: #2c3e50;
-            font-weight: 600;
-            font-size: 2em;
-            margin-bottom: 0.8em;
-        }}
-        h3 {{
-            color: #2c3e50;
-            font-weight: 600;
-            font-size: 1.5em;
-            margin-bottom: 0.6em;
-        }}
-        p {{
-            color: #34495e;
-            line-height: 1.6;
-        }}
-        .stMarkdown {{
-            color: #34495e;
-        }}
-    </style>
+    # CSS stilleri
+    st.markdown("""
+        <style>
+            /* Genel sayfa stilleri */
+            body {
+                font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+                color: #1E293B;
+                background-color: #F8FAFC;
+            }
+            
+            /* Başlık stilleri */
+            h1, h2, h3, h4, h5, h6 {
+                font-weight: 600;
+                color: #0F172A;
+            }
+            
+            /* Kart stilleri */
+            .card {
+                background-color: white;
+                border-radius: 10px;
+                padding: 1.5rem;
+                box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+                margin-bottom: 1.5rem;
+                border: 1px solid #E2E8F0;
+            }
+            
+            .card-header {
+                margin-bottom: 1rem;
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+            }
+            
+            .card-title {
+                font-weight: 600;
+                font-size: 1.1rem;
+                color: #1E293B;
+                margin: 0;
+            }
+            
+            /* İşlem satırı stilleri */
+            .transaction-row {
+                display: flex;
+                align-items: center;
+                padding: 0.75rem 0;
+                border-bottom: 1px solid #E2E8F0;
+            }
+            
+            .transaction-row:last-child {
+                border-bottom: none;
+            }
+            
+            .transaction-icon {
+                width: 40px;
+                height: 40px;
+                border-radius: 8px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                margin-right: 0.75rem;
+                flex-shrink: 0;
+            }
+            
+            .income {
+                background-color: rgba(34, 197, 94, 0.1);
+                color: #22C55E;
+            }
+            
+            .expense {
+                background-color: rgba(239, 68, 68, 0.1);
+                color: #EF4444;
+            }
+            
+            .transaction-details {
+                flex: 1;
+            }
+            
+            .transaction-title {
+                font-weight: 500;
+                color: #1E293B;
+                margin: 0;
+            }
+            
+            .transaction-meta {
+                font-size: 0.8rem;
+                color: #64748B;
+                margin: 0;
+            }
+            
+            .transaction-amount {
+                font-weight: 600;
+            }
+            
+            .positive {
+                color: #22C55E;
+            }
+            
+            .negative {
+                color: #EF4444;
+            }
+            
+            /* Metrik kartı */
+            .metric-card {
+                background-color: white;
+                border-radius: 10px;
+                padding: 1.2rem;
+                box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+                height: 100%;
+                transition: transform 0.2s;
+                border: 1px solid #E2E8F0;
+            }
+            
+            .metric-card:hover {
+                transform: translateY(-3px);
+                box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            }
+            
+            .metric-title {
+                font-size: 0.85rem;
+                color: #64748B;
+                margin-bottom: 0.5rem;
+                display: flex;
+                align-items: center;
+            }
+            
+            .metric-icon {
+                margin-right: 0.5rem;
+                font-size: 1rem;
+            }
+            
+            .metric-value {
+                font-size: 1.5rem;
+                font-weight: 700;
+                color: #0F172A;
+                margin: 0;
+            }
+            
+            .metric-trend {
+                font-size: 0.8rem;
+                margin-top: 0.5rem;
+            }
+            
+            .trend-up {
+                color: #22C55E;
+            }
+            
+            .trend-down {
+                color: #EF4444;
+            }
+            
+            /* Grafikler için stil düzenlemeleri */
+            .stPlotlyChart {
+                padding: 0 !important;
+            }
+            
+            /* Sayfa arka plan rengi */
+            .main .block-container {
+                padding-top: 1rem;
+                padding-left: 1.5rem; 
+                padding-right: 1.5rem;
+                padding-bottom: 1rem;
+            }
+            
+            /* Tooltip */
+            .tooltip {
+                position: relative;
+                display: inline-block;
+                cursor: help;
+                margin-left: 5px;
+            }
+            
+            .tooltip .tooltip-text {
+                visibility: hidden;
+                width: 200px;
+                background-color: #333;
+                color: #fff;
+                text-align: center;
+                border-radius: 5px;
+                padding: 5px;
+                position: absolute;
+                z-index: 1;
+                bottom: 125%;
+                left: 50%;
+                margin-left: -100px;
+                opacity: 0;
+                transition: opacity 0.3s;
+                font-size: 0.7rem;
+            }
+            
+            .tooltip:hover .tooltip-text {
+                visibility: visible;
+                opacity: 1;
+            }
+        </style>
+    """, unsafe_allow_html=True)
+    
+    # JavaScript enjeksiyonu
+    st.markdown("""
+        <script>
+            // Sayfa yüklendiğinde çalışacak fonksiyon
+            document.addEventListener('DOMContentLoaded', function() {
+                console.log('Page fully loaded, setting up event listeners');
+                
+                // Session state kontrolü için yardımcı fonksiyonlar
+                window.setSessionState = function(key, value) {
+                    window.parent.postMessage({
+                        type: 'streamlit:setSessionState',
+                        state: { [key]: value }
+                    }, '*');
+                };
+            });
+            
+            // URL'den sayfa parametresi alma
+            function getPageFromUrl() {
+                const params = new URLSearchParams(window.location.search);
+                return params.get('page');
+            }
+        </script>
     """, unsafe_allow_html=True)
 
-
 def check_auth():
-    """Oturum kontrolü yapar."""
-    if 'user_id' not in st.session_state or not st.session_state.user_id:
-        st.warning("Lütfen giriş yapın!")
+    """Kullanıcı oturum durumunu kontrol eder."""
+    if "user_id" not in st.session_state or "username" not in st.session_state:
         st.switch_page("pages/login.py")
+    
+    # Yeni sayfa seçimini izle
+    if "page" not in st.session_state:
+        st.session_state.page = "Genel Bakış"
 
-
-def create_dashboard_metrics(summary):
-    """Dashboard metriklerini oluşturur."""
-    col1, col2, col3 = st.columns(3)
+def create_metrics(transaction_service):
+    """Dashboard için metrikler oluşturur"""
+    # Son 30 gün içindeki işlemleri al
+    current_date = datetime.now().date()
+    start_date = current_date - timedelta(days=30)
+    
+    # Gelir, gider ve bakiye hesapla
+    transactions = transaction_service.get_transactions_by_date_range(start_date, current_date)
+    
+    income = sum(t.amount for t in transactions if t.type == "income")
+    expense = sum(t.amount for t in transactions if t.type == "expense")
+    balance = income - expense
+    
+    # En son 5 işlemin toplam tutarı
+    last_transactions = transaction_service.get_last_transactions(5)
+    recent_total = sum(t.amount for t in last_transactions if t.type == "expense")
+    
+    # Metrikleri göster
+    col1, col2, col3, col4 = st.columns(4)
     
     with col1:
-        st.metric(
-            label="Toplam Gelir",
-            value=f"₺{summary['total_income']:,.2f}",
-            delta=f"₺{summary['total_income'] - summary['total_expense']:,.2f}"
-        )
+        st.metric(label="Toplam Gelir (30 gün)", 
+                 value=format_currency(income), 
+                 delta=format_currency(income*0.1))
     
     with col2:
-        st.metric(
-            label="Toplam Gider",
-            value=f"₺{summary['total_expense']:,.2f}",
-            delta=f"-₺{summary['total_expense']:,.2f}"
-        )
+        st.metric(label="Toplam Gider (30 gün)", 
+                 value=format_currency(expense), 
+                 delta=format_currency(-expense*0.05),
+                 delta_color="inverse")
     
     with col3:
-        st.metric(
-            label="Net Durum",
-            value=f"₺{summary['net_amount']:,.2f}",
-            delta=f"₺{summary['net_amount']:,.2f}"
-        )
-
-
-def create_transaction_chart(transactions):
-    """İşlem grafiği oluşturur."""
-    if not transactions or not transactions.get("transactions"):
-        return None
+        st.metric(label="Net Bakiye (30 gün)", 
+                 value=format_currency(balance), 
+                 delta=format_currency(balance*0.15))
+    
+    with col4:
+        st.metric(label="Son İşlemler (5)", 
+                 value=format_currency(recent_total), 
+                 delta=format_currency(-recent_total*0.02),
+                 delta_color="inverse")
+                 
+def create_transaction_chart(transaction_service, chart_type="line"):
+    """İşlem grafiği oluşturur"""
+    # Son 30 günlük işlemleri al
+    current_date = datetime.now().date()
+    start_date = current_date - timedelta(days=30)
+    
+    transactions = transaction_service.get_transactions_by_date_range(start_date, current_date)
+    
+    # İşlemleri DataFrame'e dönüştür
+    df_data = [
+        {
+            'date': t.date,
+            'amount': t.amount if t.type == 'income' else -t.amount,
+            'type': t.type,
+            'category': t.category.name if t.category else 'Kategorisiz'
+        }
+        for t in transactions
+    ]
+    
+    if not df_data:
+        st.info("Grafik için yeterli işlem verisi bulunmuyor.")
+        return
         
-    # İşlemleri tarihe göre grupla
-    daily_transactions = {}
-    for t in transactions["transactions"]:
-        try:
-            date_key = t.date.strftime("%Y-%m-%d")
-            if date_key not in daily_transactions:
-                daily_transactions[date_key] = {"income": 0, "expense": 0}
-            daily_transactions[date_key][t.type] += t.amount
-        except Exception as e:
-            print(f"Hata: {str(e)}")
-            continue
+    df = pd.DataFrame(df_data)
+    df['date'] = pd.to_datetime(df['date'])
+    df = df.sort_values('date')
     
-    # Tarihleri sırala
-    dates = sorted(daily_transactions.keys())
-    
-    # Gelir ve giderleri ayır
-    incomes = [daily_transactions[d]["income"] for d in dates]
-    expenses = [daily_transactions[d]["expense"] for d in dates]
-    
-    # Grafik oluştur
-    fig = go.Figure()
-    
-    # Gelir çizgisi
-    fig.add_trace(go.Scatter(
-        x=dates,
-        y=incomes,
-        name="Gelir",
-        line=dict(color="#27ae60", width=3),
-        mode="lines+markers",
-        marker=dict(size=8),
-        hovertemplate=(
-            "<b>%{x}</b><br>" +
-            "Gelir: ₺%{y:,.2f}<br>" +
-            "<extra></extra>"
-        )
-    ))
-    
-    # Gider çizgisi
-    fig.add_trace(go.Scatter(
-        x=dates,
-        y=expenses,
-        name="Gider",
-        line=dict(color="#e74c3c", width=3),
-        mode="lines+markers",
-        marker=dict(size=8),
-        hovertemplate=(
-            "<b>%{x}</b><br>" +
-            "Gider: ₺%{y:,.2f}<br>" +
-            "<extra></extra>"
-        )
-    ))
-    
-    # Grafik ayarları
-    fig.update_layout(
-        title={
-            'text': "Gelir ve Gider Trendi",
-            'y':0.95,
-            'x':0.5,
-            'xanchor': 'center',
-            'yanchor': 'top',
-            'font': {'size': 24}
-        },
-        xaxis_title="Tarih",
-        yaxis_title="Miktar (₺)",
-        showlegend=True,
-        legend=dict(
-            orientation="h",
-            yanchor="bottom",
-            y=1.02,
-            xanchor="right",
-            x=1,
-            font=dict(size=14)
-        ),
-        hovermode="x unified",
-        plot_bgcolor='rgba(0,0,0,0)',
-        paper_bgcolor='rgba(0,0,0,0)',
-        margin=dict(t=50, b=50, l=50, r=50),
-        height=400
-    )
-    
-    # X ekseni ayarları
-    fig.update_xaxes(
-        showgrid=True,
-        gridwidth=1,
-        gridcolor='rgba(0,0,0,0.1)',
-        tickfont=dict(size=12)
-    )
-    
-    # Y ekseni ayarları
-    fig.update_yaxes(
-        showgrid=True,
-        gridwidth=1,
-        gridcolor='rgba(0,0,0,0.1)',
-        tickfont=dict(size=12),
-        tickformat="₺,"
-    )
-    
-    return fig
+    # Grafik tipine göre görselleştirme
+    if chart_type == "line":
+        # Günlük toplam işlemler
+        daily_totals = df.groupby([df['date'].dt.date, 'type'])['amount'].sum().unstack().fillna(0)
+        
+        # Eksik günleri doldur
+        date_range = pd.date_range(start=start_date, end=current_date)
+        daily_totals = daily_totals.reindex(date_range.date, fill_value=0)
+        
+        # Çizgi grafiği
+        st.line_chart(daily_totals, color=['#FF9800', '#4CAF50'] if 'expense' in daily_totals.columns and 'income' in daily_totals.columns else None)
+        
+    elif chart_type == "bar":
+        # Kategori bazlı harcamalar
+        category_expenses = df[df['type'] == 'expense'].groupby('category')['amount'].sum().abs().sort_values(ascending=False)
+        
+        # Bar chart
+        st.bar_chart(category_expenses)
+        
+    elif chart_type == "area":
+        # Kümülatif toplam
+        df['cumulative'] = df.sort_values('date')['amount'].cumsum()
+        cumulative_by_date = df.groupby(df['date'].dt.date)['cumulative'].last()
+        
+        # Alan grafiği
+        st.area_chart(cumulative_by_date)
 
+# Ana sayfa gösterimi
+def show_dashboard():
+    """Genel bakış sayfasını gösterir."""
+    st.title("📊 Genel Bakış")
+    
+    # Servis örnekleri oluştur
+    transaction_service = TransactionService()
+    budget_service = BudgetService()
+    category_service = CategoryService()
+    goal_service = GoalService()
+    
+    # Kullanıcı bilgilerini göster
+    st.markdown(f"""
+    <div style="background-color: white; padding: 1.5rem; border-radius: 10px; margin-bottom: 1.5rem;
+              box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1); border-left: 4px solid {PRIMARY_COLOR};">
+        <h3 style="margin-top: 0; color: {PRIMARY_COLOR};">Hoş Geldin, {st.session_state.get('username', 'Kullanıcı')}!</h3>
+        <p style="margin-bottom: 0;">Finansal durumunuzun güncel özeti aşağıda görüntülenmektedir.</p>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    # Dashboard metriklerini göster
+    create_metrics(transaction_service)
+    
+    # Grafik seçenekleri
+    chart_options = {
+        "Çizgi Grafik": "line", 
+        "Çubuk Grafik": "bar", 
+        "Alan Grafik": "area"
+    }
+    
+    selected_chart = st.selectbox("Grafik Tipi", list(chart_options.keys()))
+    
+    # Seçilen grafiği göster
+    create_transaction_chart(transaction_service, chart_options[selected_chart])
+    
+    # Son işlemler ve bütçe ilerleme durumu
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        st.subheader("Son İşlemler")
+        transactions = transaction_service.get_last_transactions(5)
+        
+        if not transactions:
+            st.info("Henüz işlem bulunmuyor.")
+        else:
+            for t in transactions:
+                date_str = t.date.strftime("%d.%m.%Y")
+                type_color = PRIMARY_COLOR if t.type == "income" else SECONDARY_COLOR
+                type_icon = "↑" if t.type == "income" else "↓"
+                
+                st.markdown(f"""
+                <div style="display: flex; align-items: center; margin-bottom: 8px; background-color: white; padding: 12px; border-radius: 5px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+                    <div style="background-color: {type_color}; color: white; width: 30px; height: 30px; display: flex; align-items: center; justify-content: center; border-radius: 50%; margin-right: 12px;">
+                        {type_icon}
+                    </div>
+                    <div style="flex-grow: 1;">
+                        <div style="font-weight: 500;">{t.description}</div>
+                        <div style="font-size: 0.8em; color: #6c757d;">{date_str} • {t.category.name if t.category else 'Kategorisiz'}</div>
+                    </div>
+                    <div style="font-weight: 500; color: {type_color};">
+                        {format_currency(t.amount)}
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
+    
+    with col2:
+        st.subheader("Bütçe Durumu")
+        budgets = budget_service.get_active_budgets()
+        
+        if not budgets:
+            st.info("Aktif bütçe bulunmuyor.")
+        else:
+            for b in budgets:
+                category_name = b.category.name if b.category else "Genel"
+                spent = budget_service.get_spent_amount(b.id)
+                percentage = min(int((spent / b.amount) * 100), 100) if b.amount > 0 else 0
+                
+                status_color = ACCENT_COLOR
+                if percentage >= 90:
+                    status_color = "#e74c3c"
+                elif percentage >= 70:
+                    status_color = "#f39c12"
+                
+                st.markdown(f"""
+                <div style="background-color: white; padding: 15px; border-radius: 5px; margin-bottom: 10px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+                    <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+                        <div style="font-weight: 500;">{category_name}</div>
+                        <div>{format_currency(spent)} / {format_currency(b.amount)}</div>
+                    </div>
+                    <div style="background-color: #f1f1f1; border-radius: 5px; height: 10px; width: 100%;">
+                        <div style="background-color: {status_color}; width: {percentage}%; height: 100%; border-radius: 5px;"></div>
+                    </div>
+                    <div style="font-size: 0.8em; color: #6c757d; margin-top: 5px;">
+                        {b.description} • {percentage}% kullanıldı
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
 
 def main():
     """Ana uygulama fonksiyonu."""
@@ -339,738 +513,32 @@ def main():
     # Veritabanını başlat
     init_db()
     
+    # Veritabanı güncellemesi
+    try:
+        from utils.migrate_db import migrate_db
+        migrate_db()
+    except Exception as e:
+        st.error(f"Veritabanı güncellenirken hata oluştu: {str(e)}")
+    
     # Oturum kontrolü
     check_auth()
     
-    # Servisleri başlat
-    db = next(get_db())
-    db_service = DatabaseService(db)
-    report_service = ReportService(db)
-    notification_service = NotificationService(db)
-    budget_service = BudgetService(db)
-    data_generator = DataGenerator(db)
+    # Debug özelliğini aktifleştirme (geliştirme için)
+    if st.session_state.get("debug", False):
+        if "page" in st.session_state:
+            st.info(f"Mevcut sayfa: {st.session_state['page']}")
+        st.write("Session state:", st.session_state)
     
-    # Son 30 günlük özet için tarihleri ayarla
-    end_date = dt_date.today()
-    start_date = end_date - timedelta(days=30)
+    # Sidebar ve navigasyonu oluştur
+    current_page = create_sidebar()
     
-    # Bildirimleri kontrol et
-    notifications = notification_service.get_all_notifications(st.session_state.user_id)
+    # Bildirim merkezini göster
+    notification_count = st.session_state.get("notification_count", 0)
+    show_notification_center(notification_count)
     
-    # Sidebar
-    with st.sidebar:
-        st.title("💰 Finans Yönetimi")
-        st.markdown("---")
-        
-        # Kullanıcı bilgileri
-        st.markdown(f"👤 **{st.session_state.username}**")
-        
-        # Veri üretme butonu
-        if st.button("🎲 Rastgele Veri Üret"):
-            try:
-                result = data_generator.populate_user_data(st.session_state.user_id)
-                st.success(f"""
-                Veriler başarıyla üretildi:
-                - {result['transactions']} işlem
-                - {result['budgets']} bütçe
-                - {result['goals']} hedef
-                """)
-            except Exception as e:
-                st.error(f"Veri üretilirken hata oluştu: {str(e)}")
-        
-        # Menü
-        st.markdown("### 📋 Menü")
-        menu_items = [
-            {"icon": "🏠", "label": "Ana Sayfa"},
-            {"icon": "💰", "label": "Gelir/Gider"},
-            {"icon": "📊", "label": "Bütçe"},
-            {"icon": "🎯", "label": "Hedefler"},
-            {"icon": "📈", "label": "Raporlar"},
-            {"icon": "🔔", "label": "Bildirimler"},
-            {"icon": "💾", "label": "Yedekleme"}
-        ]
-        
-        page = st.radio(
-            "Sayfa Seçimi",
-            [item["label"] for item in menu_items],
-            label_visibility="collapsed"
-        )
-        
-        # Çıkış butonu
-        st.markdown("---")
-        if st.button("🚪 Çıkış Yap", use_container_width=True):
-            for key in ['user_id', 'username', 'token']:
-                st.session_state.pop(key, None)
-            st.switch_page("pages/login.py")
-
-    # Ana sayfa
-    if page == "Ana Sayfa":
-        st.title("💰 Finansal Durumunuz")
-        
-        # Son 30 günlük özet
-        summary = db_service.get_transaction_summary(
-            st.session_state.user_id, 
-            start_date, 
-            end_date
-        )
-        
-        # Metrikler
-        col1, col2, col3 = st.columns(3)
-        
-        with col1:
-            st.markdown("""
-                <div style='background-color: #ffffff; padding: 20px; border-radius: 10px; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);'>
-                    <h3 style='color: #2c3e50; margin-bottom: 10px;'>Bu Ay Toplam Gelir</h3>
-                    <h2 style='color: #27ae60; margin: 0;'>₺{:.2f}</h2>
-                    <p style='color: #7f8c8d; margin: 5px 0 0 0;'>Geçen aya göre: ₺{:.2f}</p>
-                </div>
-            """.format(summary['total_income'], summary['total_income'] - summary['total_expense']), unsafe_allow_html=True)
-        
-        with col2:
-            st.markdown("""
-                <div style='background-color: #ffffff; padding: 20px; border-radius: 10px; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);'>
-                    <h3 style='color: #2c3e50; margin-bottom: 10px;'>Bu Ay Toplam Gider</h3>
-                    <h2 style='color: #e74c3c; margin: 0;'>₺{:.2f}</h2>
-                    <p style='color: #7f8c8d; margin: 5px 0 0 0;'>Geçen aya göre: ₺{:.2f}</p>
-                </div>
-            """.format(summary['total_expense'], summary['total_expense']), unsafe_allow_html=True)
-        
-        with col3:
-            st.markdown("""
-                <div style='background-color: #ffffff; padding: 20px; border-radius: 10px; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);'>
-                    <h3 style='color: #2c3e50; margin-bottom: 10px;'>Bu Ay Net Durum</h3>
-                    <h2 style='color: #3498db; margin: 0;'>₺{:.2f}</h2>
-                    <p style='color: #7f8c8d; margin: 5px 0 0 0;'>Geçen aya göre: ₺{:.2f}</p>
-                </div>
-            """.format(summary['net_amount'], summary['net_amount']), unsafe_allow_html=True)
-        
-        # Grafikler
-        st.markdown("""
-            <div style='background-color: #ffffff; padding: 20px; border-radius: 10px; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1); margin-top: 20px;'>
-                <h3 style='color: #2c3e50; margin-bottom: 20px;'>📈 Gelir/Gider Trendi</h3>
-            </div>
-        """, unsafe_allow_html=True)
-        
-        transactions = db_service.get_user_transactions(st.session_state.user_id)
-        fig = create_transaction_chart(transactions)
-        if fig:
-            st.plotly_chart(fig, use_container_width=True)
-            
-            # Son işlemler
-            st.markdown("""
-                <div style='background-color: #ffffff; padding: 20px; border-radius: 10px; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1); margin-top: 20px;'>
-                    <h3 style='color: #2c3e50; margin-bottom: 20px;'>📋 Son İşlemleriniz</h3>
-                </div>
-            """, unsafe_allow_html=True)
-            
-            if transactions and transactions.get("transactions"):
-                df = pd.DataFrame([{
-                    'Tarih': t.date,
-                    'Tip': t.type,
-                    'Kategori': t.category,
-                    'Miktar': t.amount,
-                    'Açıklama': t.description
-                } for t in transactions["transactions"][:5]])  # Son 5 işlem
-                
-                # DataFrame'i özelleştir
-                st.dataframe(
-                    df,
-                    use_container_width=True,
-                    hide_index=True,
-                    column_config={
-                        'Tarih': st.column_config.DateColumn(
-                            'Tarih',
-                            format='DD.MM.YYYY'
-                        ),
-                        'Tip': st.column_config.SelectboxColumn(
-                            'Tip',
-                            options=['Gelir', 'Gider'],
-                            default='Gelir'
-                        ),
-                        'Kategori': st.column_config.TextColumn('Kategori'),
-                        'Miktar': st.column_config.NumberColumn(
-                            'Miktar',
-                            format='₺%.2f'
-                        ),
-                        'Açıklama': st.column_config.TextColumn('Açıklama')
-                    }
-                )
-            else:
-                st.info("Henüz işlem bulunmuyor.")
-        else:
-            st.info("Henüz işlem bulunmuyor.")
-
-    # Gelir/Gider sayfası
-    elif page == "Gelir/Gider":
-        st.title("💰 Gelir/Gider Yönetimi")
-        
-        # İşlem ekleme formu
-        with st.form("transaction_form"):
-            st.subheader("➕ Yeni İşlem Ekle")
-            col1, col2 = st.columns(2)
-            
-            with col1:
-                transaction_type = st.selectbox("İşlem Tipi", ["Gelir", "Gider"])
-                amount = st.number_input("Miktar", min_value=0.0)
-                category = st.text_input("Kategori")
-            
-            with col2:
-                date = st.date_input("Tarih")
-                description = st.text_area("Açıklama")
-                is_recurring = st.checkbox("Tekrarlayan İşlem")
-            
-            if is_recurring:
-                recurring_type = st.selectbox(
-                    "Tekrar Sıklığı",
-                    ["Günlük", "Haftalık", "Aylık", "Yıllık"]
-                )
-            else:
-                recurring_type = None
-            
-            submitted = st.form_submit_button("İşlem Ekle")
-            
-            if submitted:
-                try:
-                    db_service.create_transaction(
-                        user_id=st.session_state.user_id,
-                        amount=amount,
-                        type=transaction_type.lower(),
-                        category=category,
-                        description=description,
-                        date=date,
-                        is_recurring=is_recurring,
-                        recurring_type=recurring_type.lower() if recurring_type else None
-                    )
-                    st.success("İşlem başarıyla eklendi!")
-                    # Önbelleği temizle
-                    db_service.clear_cache()
-                except Exception as e:
-                    st.error(f"İşlem eklenirken hata oluştu: {str(e)}")
-        
-        # İşlem listesi
-        st.subheader("📋 Son İşlemler")
-        
-        # Filtreler
-        col1, col2, col3, col4 = st.columns(4)
-        
-        with col1:
-            transaction_type_filter = st.selectbox(
-                "İşlem Tipi",
-                ["Tümü", "Gelir", "Gider"],
-                key="transaction_type_filter"
-            )
-        
-        with col2:
-            # Kategori filtresi
-            categories = ["Tümü"]
-            transactions_data = db_service.get_user_transactions(st.session_state.user_id)
-            if transactions_data and transactions_data.get("transactions"):
-                categories.extend(list(set(t.category for t in transactions_data["transactions"])))
-            category_filter = st.selectbox("Kategori", categories)
-        
-        with col3:
-            min_amount = st.number_input(
-                "Min. Miktar",
-                min_value=0.0,
-                value=0.0,
-                step=100.0
-            )
-        
-        with col4:
-            max_amount = st.number_input(
-                "Max. Miktar",
-                min_value=0.0,
-                value=1000000000.0,  # 1 milyar TL
-                step=100.0
-            )
-        
-        # Sayfalama
-        if "current_page" not in st.session_state:
-            st.session_state.current_page = 1
-        
-        # İşlemleri getir
-        transactions_data = db_service.get_user_transactions(
-            user_id=st.session_state.user_id,
-            page=st.session_state.current_page,
-            per_page=50,
-            transaction_type=transaction_type_filter.lower() if transaction_type_filter != "Tümü" else None,
-            category=category_filter if category_filter != "Tümü" else None
-        )
-        
-        if transactions_data and transactions_data.get("transactions"):
-            df = pd.DataFrame([{
-                'Tarih': t.date,
-                'Tip': t.type,
-                'Kategori': t.category,
-                'Miktar': t.amount,
-                'Açıklama': t.description
-            } for t in transactions_data["transactions"]])
-            
-            # DataFrame'i özelleştir
-            st.dataframe(
-                df,
-                use_container_width=True,
-                hide_index=True,
-                column_config={
-                    'Tarih': st.column_config.DateColumn(
-                        'Tarih',
-                        format='DD.MM.YYYY'
-                    ),
-                    'Tip': st.column_config.SelectboxColumn(
-                        'Tip',
-                        options=['Gelir', 'Gider'],
-                        default='Gelir'
-                    ),
-                    'Kategori': st.column_config.TextColumn('Kategori'),
-                    'Miktar': st.column_config.NumberColumn(
-                        'Miktar',
-                        format='₺%.2f'
-                    ),
-                    'Açıklama': st.column_config.TextColumn('Açıklama')
-                }
-            )
-            
-            # Sayfalama kontrolleri
-            col1, col2, col3 = st.columns([1, 2, 1])
-            
-            with col1:
-                if st.button("◀️ Önceki Sayfa") and st.session_state.current_page > 1:
-                    st.session_state.current_page -= 1
-                    st.rerun()
-            
-            with col2:
-                st.write(f"Sayfa {st.session_state.current_page}/{transactions_data['total_pages']}")
-            
-            with col3:
-                if st.button("Sonraki Sayfa ▶️") and st.session_state.current_page < transactions_data["total_pages"]:
-                    st.session_state.current_page += 1
-                    st.rerun()
-        else:
-            st.info("Henüz işlem bulunmuyor.")
-
-    # Bütçe sayfası
-    elif page == "Bütçe":
-        st.title("💰 Bütçe Planlama")
-        
-        # Bütçe önerileri
-        st.subheader("📊 Bütçe Önerileri")
-        recommendations = budget_service.get_category_recommendations(st.session_state.user_id)
-        
-        if recommendations:
-            st.markdown("### Kategori Bazlı Öneriler")
-            for rec in recommendations:
-                with st.expander(f"{rec['category']} - Güven Skoru: %{rec['confidence']*100:.1f}"):
-                    st.write(f"Önerilen Bütçe: ₺{rec['suggested_budget']:,.2f}")
-                    st.write(f"Ortalama Harcama: ₺{rec['average_spending']:,.2f}")
-                    st.write(f"Trend: {'📈 Artıyor' if rec['trend'] > 0 else '📉 Azalıyor' if rec['trend'] < 0 else '➡️ Sabit'}")
-        
-        # Bütçe optimizasyonu
-        st.markdown("### 🎯 Bütçe Optimizasyonu")
-        with st.form("budget_optimization"):
-            total_budget = st.number_input("Toplam Bütçe", min_value=0.0)
-            
-            if st.form_submit_button("Optimize Et"):
-                optimized_budgets = budget_service.optimize_budget(st.session_state.user_id, total_budget)
-                
-                if optimized_budgets:
-                    st.markdown("#### Optimize Edilmiş Bütçe Dağılımı")
-                    for budget in optimized_budgets:
-                        st.write(f"**{budget['category']}**")
-                        st.write(f"Önerilen: ₺{budget['suggested_budget']:,.2f}")
-                        st.write(f"Optimize: ₺{budget['optimized_budget']:,.2f}")
-                        st.write(f"Güven Skoru: %{budget['confidence']*100:.1f}")
-                        st.markdown("---")
-        
-        # Bütçe ekleme formu
-        st.subheader("➕ Yeni Bütçe Ekle")
-        with st.form("budget_form"):
-            col1, col2 = st.columns(2)
-            
-            with col1:
-                category = st.text_input("Kategori")
-                amount = st.number_input("Bütçe Limiti", min_value=0.0)
-                period = st.selectbox("Dönem", ["Aylık", "Yıllık"])
-            
-            with col2:
-                start_date = st.date_input("Başlangıç Tarihi")
-                end_date = st.date_input("Bitiş Tarihi")
-            
-            submitted = st.form_submit_button("Bütçe Ekle")
-            
-            if submitted:
-                try:
-                    db_service.create_budget(
-                        user_id=st.session_state.user_id,
-                        category=category,
-                        amount=amount,
-                        period=period.lower(),
-                        start_date=start_date,
-                        end_date=end_date
-                    )
-                    st.success("Bütçe başarıyla eklendi!")
-                    # Önbelleği temizle
-                    db_service.clear_cache()
-                except Exception as e:
-                    st.error(f"Bütçe eklenirken hata oluştu: {str(e)}")
-        
-        # Bütçe listesi
-        st.subheader("📋 Bütçeler")
-        
-        # Sayfalama
-        if "budget_page" not in st.session_state:
-            st.session_state.budget_page = 1
-        
-        # Bütçeleri getir
-        budgets_data = db_service.get_user_budgets(
-            user_id=st.session_state.user_id,
-            page=st.session_state.budget_page,
-            per_page=50,
-            active_only=True
-        )
-        
-        if budgets_data and budgets_data.get("budgets"):
-            df = pd.DataFrame([{
-                'Kategori': b.category,
-                'Miktar': b.amount,
-                'Dönem': b.period,
-                'Başlangıç': b.start_date,
-                'Bitiş': b.end_date
-            } for b in budgets_data["budgets"]])
-            
-            # DataFrame'i özelleştir
-            st.dataframe(
-                df,
-                use_container_width=True,
-                hide_index=True,
-                column_config={
-                    'Kategori': st.column_config.TextColumn('Kategori'),
-                    'Miktar': st.column_config.NumberColumn(
-                        'Miktar',
-                        format='₺%.2f'
-                    ),
-                    'Dönem': st.column_config.SelectboxColumn(
-                        'Dönem',
-                        options=['Aylık', 'Yıllık'],
-                        default='Aylık'
-                    ),
-                    'Başlangıç': st.column_config.DateColumn(
-                        'Başlangıç',
-                        format='DD.MM.YYYY'
-                    ),
-                    'Bitiş': st.column_config.DateColumn(
-                        'Bitiş',
-                        format='DD.MM.YYYY'
-                    )
-                }
-            )
-            
-            # Sayfalama kontrolleri
-            col1, col2, col3 = st.columns([1, 2, 1])
-            
-            with col1:
-                if st.button("◀️ Önceki Sayfa", key="budget_prev") and st.session_state.budget_page > 1:
-                    st.session_state.budget_page -= 1
-                    st.rerun()
-            
-            with col2:
-                st.write(f"Sayfa {st.session_state.budget_page}/{budgets_data['total_pages']}")
-            
-            with col3:
-                if st.button("Sonraki Sayfa ▶️", key="budget_next") and st.session_state.budget_page < budgets_data["total_pages"]:
-                    st.session_state.budget_page += 1
-                    st.rerun()
-        else:
-            st.info("Henüz bütçe bulunmuyor.")
-
-    # Hedefler sayfası
-    elif page == "Hedefler":
-        st.title("🎯 Finansal Hedefler")
-        
-        # Hedef ekleme formu
-        st.subheader("➕ Yeni Hedef Ekle")
-        with st.form("goal_form"):
-            col1, col2 = st.columns(2)
-            
-            with col1:
-                name = st.text_input("Hedef Adı")
-                target_amount = st.number_input("Hedef Miktar", min_value=0.0)
-                current_amount = st.number_input("Mevcut Miktar", min_value=0.0)
-            
-            with col2:
-                deadline = st.date_input("Son Tarih")
-                priority = st.selectbox("Öncelik", ["Düşük", "Orta", "Yüksek"])
-            
-            submitted = st.form_submit_button("Hedef Ekle")
-            
-            if submitted:
-                try:
-                    db_service.create_goal(
-                        user_id=st.session_state.user_id,
-                        name=name,
-                        target_amount=target_amount,
-                        current_amount=current_amount,
-                        deadline=deadline,
-                        priority=priority.lower()
-                    )
-                    st.success("Hedef başarıyla eklendi!")
-                    # Önbelleği temizle
-                    db_service.clear_cache()
-                except Exception as e:
-                    st.error(f"Hedef eklenirken hata oluştu: {str(e)}")
-        
-        # Hedef listesi
-        st.subheader("📋 Hedefler")
-        
-        # Sayfalama
-        if "goal_page" not in st.session_state:
-            st.session_state.goal_page = 1
-        
-        # Hedefleri getir
-        goals_data = db_service.get_user_goals(
-            user_id=st.session_state.user_id,
-            page=st.session_state.goal_page,
-            per_page=50,
-            active_only=True
-        )
-        
-        if goals_data and goals_data.get("goals"):
-            df = pd.DataFrame([{
-                'Hedef': g.name,
-                'Hedef Miktar': g.target_amount,
-                'Mevcut Miktar': g.current_amount,
-                'İlerleme': f"%{(g.current_amount / g.target_amount * 100):.1f}",
-                'Son Tarih': g.deadline,
-                'Öncelik': g.priority
-            } for g in goals_data["goals"]])
-            
-            # DataFrame'i özelleştir
-            st.dataframe(
-                df,
-                use_container_width=True,
-                hide_index=True,
-                column_config={
-                    'Hedef': st.column_config.TextColumn('Hedef'),
-                    'Hedef Miktar': st.column_config.NumberColumn(
-                        'Hedef Miktar',
-                        format='₺%.2f'
-                    ),
-                    'Mevcut Miktar': st.column_config.NumberColumn(
-                        'Mevcut Miktar',
-                        format='₺%.2f'
-                    ),
-                    'İlerleme': st.column_config.TextColumn('İlerleme'),
-                    'Son Tarih': st.column_config.DateColumn(
-                        'Son Tarih',
-                        format='DD.MM.YYYY'
-                    ),
-                    'Öncelik': st.column_config.SelectboxColumn(
-                        'Öncelik',
-                        options=['Düşük', 'Orta', 'Yüksek'],
-                        default='Orta'
-                    )
-                }
-            )
-            
-            # Sayfalama kontrolleri
-            col1, col2, col3 = st.columns([1, 2, 1])
-            
-            with col1:
-                if st.button("◀️ Önceki Sayfa", key="goal_prev") and st.session_state.goal_page > 1:
-                    st.session_state.goal_page -= 1
-                    st.rerun()
-            
-            with col2:
-                st.write(f"Sayfa {st.session_state.goal_page}/{goals_data['total_pages']}")
-            
-            with col3:
-                if st.button("Sonraki Sayfa ▶️", key="goal_next") and st.session_state.goal_page < goals_data["total_pages"]:
-                    st.session_state.goal_page += 1
-                    st.rerun()
-        else:
-            st.info("Henüz hedef bulunmuyor.")
-
-    # Raporlar sayfası
-    elif page == "Raporlar":
-        st.title("📊 Finansal Raporlar")
-        
-        # Rapor dönemi seçimi
-        col1, col2 = st.columns(2)
-        with col1:
-            year = st.selectbox("Yıl", range(2020, datetime.now().year + 1), 
-                              index=datetime.now().year - 2020)
-        with col2:
-            month = st.selectbox("Ay", range(1, 13), index=datetime.now().month - 1)
-        
-        # Rapor oluştur
-        report_data = report_service.generate_monthly_report(
-            st.session_state.user_id, 
-            year, 
-            month
-        )
-        
-        # Özet metrikler
-        st.markdown("### 📈 Aylık Özet")
-        col1, col2, col3 = st.columns(3)
-        
-        with col1:
-            st.metric(
-                "Toplam Gelir",
-                f"₺{report_data['summary']['total_income']:,.2f}"
-            )
-        
-        with col2:
-            st.metric(
-                "Toplam Gider",
-                f"₺{report_data['summary']['total_expense']:,.2f}"
-            )
-        
-        with col3:
-            st.metric(
-                "Net Durum",
-                f"₺{report_data['summary']['net_amount']:,.2f}"
-            )
-        
-        # Grafikler
-        st.markdown("### 📊 Görsel Analizler")
-        
-        # Harcama dağılımı
-        if report_data['expense_by_category']:
-            st.markdown("#### 💰 Harcamalarınızın Dağılımı")
-            expense_chart = report_service.create_expense_chart(report_data['expense_by_category'])
-            if expense_chart:
-                st.plotly_chart(expense_chart, use_container_width=True)
-        
-        # Bütçe performansı
-        if report_data['budget_performance']:
-            st.markdown("#### 📈 Bütçe Durumunuz")
-            budget_chart = report_service.create_budget_chart(report_data['budget_performance'])
-            if budget_chart:
-                st.plotly_chart(budget_chart, use_container_width=True)
-        
-        # Hedef ilerlemesi
-        if report_data['goal_progress']:
-            st.markdown("#### 🎯 Hedeflerinize Ulaşma Durumunuz")
-            goal_chart = report_service.create_goal_chart(report_data['goal_progress'])
-            if goal_chart:
-                st.plotly_chart(goal_chart, use_container_width=True)
-        
-        # Excel'e aktar
-        st.markdown("### 💾 Raporu Kaydet")
-        if st.button("Excel'e Aktar"):
-            filename = f"finansal_rapor_{year}_{month:02d}.xlsx"
-            report_service.export_to_excel(
-                report_data, 
-                filename,
-                include_transactions=True,
-                include_budgets=True,
-                include_goals=True
-            )
-            st.success(f"Rapor başarıyla {filename} dosyasına kaydedildi!")
-
-    # Bildirimler sayfası
-    elif page == "Bildirimler":
-        st.title("🔔 Bildirimler")
-        
-        # Bildirimleri kategorilere ayır
-        budget_alerts = [n for n in notifications if n["type"] in ["budget_alert", "budget_warning"]]
-        goal_reminders = [n for n in notifications if n["type"] == "goal_reminder"]
-        recurring_reminders = [n for n in notifications if n["type"] == "recurring_reminder"]
-        
-        # Bütçe uyarıları
-        if budget_alerts:
-            st.subheader("💰 Bütçe Uyarıları")
-            for alert in budget_alerts:
-                with st.expander(f"{'⚠️ AŞIM' if alert['type'] == 'budget_alert' else '⚠️ UYARI'} - {alert['category']}"):
-                    st.write(f"Bütçe Limiti: ₺{alert['limit']:,.2f}")
-                    st.write(f"Harcanan: ₺{alert['spent']:,.2f}")
-                    st.write(f"Kalan: ₺{alert['remaining']:,.2f}")
-        
-        # Hedef hatırlatmaları
-        if goal_reminders:
-            st.subheader("🎯 Hedef Hatırlatmaları")
-            for reminder in goal_reminders:
-                with st.expander(f"{reminder['name']} - {reminder['days_left']} gün kaldı"):
-                    st.write(f"Hedef: ₺{reminder['target']:,.2f}")
-                    st.write(f"Mevcut: ₺{reminder['current']:,.2f}")
-                    st.write(f"İlerleme: %{reminder['progress']:.1f}")
-                    st.write(f"Son Tarih: {reminder['deadline'].strftime('%d.%m.%Y')}")
-        
-        # Tekrarlayan işlem hatırlatmaları
-        if recurring_reminders:
-            st.subheader("🔄 Tekrarlayan İşlemler")
-            for reminder in recurring_reminders:
-                with st.expander(f"{reminder['category']} - {reminder['frequency']}"):
-                    st.write(f"Miktar: ₺{reminder['amount']:,.2f}")
-                    st.write(f"Son İşlem: {reminder['last_date'].strftime('%d.%m.%Y')}")
-        
-        if not notifications:
-            st.info("Henüz bildirim bulunmuyor.")
-
-    # Yedekleme sayfası
-    elif page == "Yedekleme":
-        st.title("💾 Yedekleme ve Geri Yükleme")
-        
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            st.subheader("Yedekleri Görüntüle")
-            logger = FinanceLogger()
-            
-            # İşlem yedekleri
-            st.markdown("### 📝 İşlem Yedekleri")
-            transaction_backups = sorted(logger.backup_dir.glob("transactions_*.json"))
-            if transaction_backups:
-                for backup in transaction_backups:
-                    st.text(f"📄 {backup.name}")
-            else:
-                st.info("Henüz işlem yedeği bulunmuyor.")
-            
-            # Bütçe yedekleri
-            st.markdown("### 💰 Bütçe Yedekleri")
-            budget_backups = sorted(logger.backup_dir.glob("budgets_*.json"))
-            if budget_backups:
-                for backup in budget_backups:
-                    st.text(f"📄 {backup.name}")
-            else:
-                st.info("Henüz bütçe yedeği bulunmuyor.")
-            
-            # Hedef yedekleri
-            st.markdown("### 🎯 Hedef Yedekleri")
-            goal_backups = sorted(logger.backup_dir.glob("goals_*.json"))
-            if goal_backups:
-                for backup in goal_backups:
-                    st.text(f"📄 {backup.name}")
-            else:
-                st.info("Henüz hedef yedeği bulunmuyor.")
-        
-        with col2:
-            st.subheader("Geri Yükleme")
-            
-            # Geri yükleme formu
-            with st.form("restore_form"):
-                category = st.selectbox(
-                    "Yedek Kategorisi",
-                    ["transactions", "budgets", "goals"]
-                )
-                
-                if st.form_submit_button("Geri Yükle"):
-                    try:
-                        if db_service.restore_from_backup(category):
-                            st.success(f"{category.title()} başarıyla geri yüklendi!")
-                        else:
-                            st.warning(f"{category.title()} için yedek bulunamadı.")
-                    except Exception as e:
-                        st.error(f"Geri yükleme sırasında hata oluştu: {str(e)}")
-            
-            # Log dosyalarını görüntüle
-            st.markdown("### 📋 Log Dosyaları")
-            log_files = sorted(logger.log_dir.glob("finance_*.log"))
-            if log_files:
-                for log_file in log_files:
-                    st.text(f"📄 {log_file.name}")
-            else:
-                st.info("Henüz log dosyası bulunmuyor.")
-
-
+    # Manuel sayfa geçişleri için
+    if st.session_state.get("page", "Genel Bakış") == "Genel Bakış" and current_page == "Genel Bakış":
+        show_dashboard()
+    
 if __name__ == "__main__":
     main() 

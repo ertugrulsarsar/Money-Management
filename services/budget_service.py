@@ -1,10 +1,11 @@
 from datetime import datetime, timedelta, date
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 from sqlalchemy.orm import Session
 from models.database import Budget, Transaction
 import pandas as pd
 from sklearn.linear_model import LinearRegression
 import numpy as np
+from utils.db import db_session
 
 class BudgetService:
     def __init__(self, db: Session):
@@ -167,4 +168,154 @@ class BudgetService:
                 "confidence": rec["confidence"]
             })
         
-        return optimized_budgets 
+        return optimized_budgets
+
+    def get_budgets(self, limit: int = 100) -> List[Budget]:
+        """Tüm bütçeleri getirir."""
+        with db_session() as session:
+            return session.query(Budget).order_by(Budget.start_date.desc()).limit(limit).all()
+    
+    def get_budget_by_id(self, budget_id: int) -> Optional[Budget]:
+        """Belirli bir bütçeyi ID'sine göre getirir."""
+        with db_session() as session:
+            return session.query(Budget).filter(Budget.id == budget_id).first()
+    
+    def get_budgets_by_user(self, user_id: int) -> List[Budget]:
+        """Belirli bir kullanıcıya ait bütçeleri getirir."""
+        with db_session() as session:
+            return session.query(Budget).filter(Budget.user_id == user_id).order_by(Budget.start_date.desc()).all()
+    
+    def get_active_budgets(self, user_id: Optional[int] = None) -> List[Budget]:
+        """Aktif bütçeleri getirir."""
+        today = datetime.now().date()
+        with db_session() as session:
+            query = session.query(Budget).filter(
+                Budget.start_date <= today,
+                Budget.end_date >= today
+            )
+            
+            if user_id:
+                query = query.filter(Budget.user_id == user_id)
+                
+            return query.order_by(Budget.start_date.desc()).all()
+    
+    def get_budgets_by_category(self, category_id: int) -> List[Budget]:
+        """Belirli bir kategoriye ait bütçeleri getirir."""
+        with db_session() as session:
+            return session.query(Budget).filter(
+                Budget.category_id == category_id
+            ).order_by(Budget.start_date.desc()).all()
+    
+    def get_spent_amount(self, budget_id: int) -> float:
+        """Belirli bir bütçe için harcanan tutarı hesaplar."""
+        with db_session() as session:
+            budget = session.query(Budget).filter(Budget.id == budget_id).first()
+            
+            if not budget:
+                return 0.0
+                
+            # Bütçeye ait kategorideki tüm harcamaları topla
+            query = session.query(Transaction).filter(
+                Transaction.date >= budget.start_date,
+                Transaction.date <= budget.end_date,
+                Transaction.type == "expense"
+            )
+            
+            # Eğer bütçe belirli bir kategoriye aitse sadece o kategorideki harcamaları al
+            if budget.category_id:
+                query = query.filter(Transaction.category_id == budget.category_id)
+            elif budget.user_id:
+                # Kategorisiz bütçe ise kullanıcının tüm harcamalarını al
+                query = query.filter(Transaction.user_id == budget.user_id)
+                
+            transactions = query.all()
+            return sum(t.amount for t in transactions)
+    
+    def get_budget_progress(self, budget_id: int) -> dict:
+        """Belirli bir bütçenin ilerleme durumunu hesaplar."""
+        with db_session() as session:
+            budget = session.query(Budget).filter(Budget.id == budget_id).first()
+            
+            if not budget:
+                return {
+                    "total": 0,
+                    "spent": 0,
+                    "remaining": 0,
+                    "percentage": 0
+                }
+                
+            spent = self.get_spent_amount(budget_id)
+            remaining = budget.amount - spent
+            percentage = (spent / budget.amount * 100) if budget.amount > 0 else 0
+            
+            return {
+                "total": budget.amount,
+                "spent": spent,
+                "remaining": remaining,
+                "percentage": min(percentage, 100)  # Yüzde 100'den fazla olmamalı
+            }
+    
+    def create_budget(
+        self,
+        user_id: int,
+        amount: float,
+        start_date: datetime,
+        end_date: datetime,
+        description: str,
+        category_id: Optional[int] = None
+    ) -> Budget:
+        """Yeni bir bütçe oluşturur."""
+        with db_session() as session:
+            budget = Budget(
+                user_id=user_id,
+                amount=amount,
+                start_date=start_date,
+                end_date=end_date,
+                description=description,
+                category_id=category_id
+            )
+            session.add(budget)
+            session.commit()
+            session.refresh(budget)
+            return budget
+    
+    def update_budget(
+        self,
+        budget_id: int,
+        amount: Optional[float] = None,
+        start_date: Optional[datetime] = None,
+        end_date: Optional[datetime] = None,
+        description: Optional[str] = None,
+        category_id: Optional[int] = None
+    ) -> Optional[Budget]:
+        """Mevcut bir bütçeyi günceller."""
+        with db_session() as session:
+            budget = session.query(Budget).filter(Budget.id == budget_id).first()
+            if not budget:
+                return None
+                
+            if amount is not None:
+                budget.amount = amount
+            if start_date is not None:
+                budget.start_date = start_date
+            if end_date is not None:
+                budget.end_date = end_date
+            if description is not None:
+                budget.description = description
+            if category_id is not None:
+                budget.category_id = category_id
+                
+            session.commit()
+            session.refresh(budget)
+            return budget
+    
+    def delete_budget(self, budget_id: int) -> bool:
+        """Bir bütçeyi siler."""
+        with db_session() as session:
+            budget = session.query(Budget).filter(Budget.id == budget_id).first()
+            if not budget:
+                return False
+                
+            session.delete(budget)
+            session.commit()
+            return True 

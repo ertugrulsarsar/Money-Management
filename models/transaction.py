@@ -1,69 +1,54 @@
-from dataclasses import dataclass
-from datetime import datetime
-from enum import Enum
-from typing import Optional, List
+from sqlalchemy import Column, Integer, String, Float, Date, ForeignKey, Text
+from sqlalchemy.orm import relationship
+from models.base import Base
+import datetime
 
-
-class TransactionType(Enum):
-    INCOME = "Gelir"
-    EXPENSE = "Gider"
-
-
-class Category(Enum):
-    # Gelir kategorileri
-    SALARY = "Maaş"
-    INVESTMENT = "Yatırım"
-    GIFT = "Hediye"
-    OTHER_INCOME = "Diğer Gelir"
+class Transaction(Base):
+    """İşlem (gelir/gider) modeli."""
     
-    # Gider kategorileri
-    FOOD = "Yemek"
-    RENT = "Kira"
-    UTILITIES = "Faturalar"
-    TRANSPORTATION = "Ulaşım"
-    ENTERTAINMENT = "Eğlence"
-    SHOPPING = "Alışveriş"
-    HEALTH = "Sağlık"
-    EDUCATION = "Eğitim"
-    OTHER_EXPENSE = "Diğer Gider"
+    __tablename__ = "transactions"
     
-    @classmethod
-    def income_categories(cls) -> List["Category"]:
-        return [cls.SALARY, cls.INVESTMENT, cls.GIFT, cls.OTHER_INCOME]
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    amount = Column(Float, nullable=False)
+    description = Column(String(255), nullable=True)
+    date = Column(Date, default=datetime.datetime.now().date(), nullable=False)
+    type = Column(String(20), nullable=False)  # "income", "expense", "saving", "transfer"
+    category_id = Column(Integer, ForeignKey("categories.id"), nullable=True)
+    goal_id = Column(Integer, ForeignKey("goals.id"), nullable=True)
+    created_at = Column(Date, default=datetime.datetime.now().date(), nullable=False)
     
-    @classmethod
-    def expense_categories(cls) -> List["Category"]:
-        return [cls.FOOD, cls.RENT, cls.UTILITIES, cls.TRANSPORTATION, 
-                cls.ENTERTAINMENT, cls.SHOPPING, cls.HEALTH, cls.EDUCATION, 
-                cls.OTHER_EXPENSE]
-
-
-@dataclass
-class Transaction:
-    amount: float
-    category: str  # Artık doğrudan string olarak kategori adını saklar
-    description: str
-    date: datetime
-    transaction_type: TransactionType
-    id: Optional[str] = None
+    # İlişkiler
+    user = relationship("User", back_populates="transactions")
+    category = relationship("Category", back_populates="transactions")
+    goal = relationship("Goal", back_populates="transactions")
     
-    def to_dict(self) -> dict:
+    def __init__(self, user_id, amount, description, date, type, category_id=None, goal_id=None):
+        """Transaction nesnesini başlatır."""
+        self.user_id = user_id
+        self.amount = amount
+        self.description = description
+        self.date = date
+        self.type = type
+        self.category_id = category_id
+        self.goal_id = goal_id
+        self.created_at = datetime.datetime.now().date()
+    
+    def __repr__(self):
+        """Transaction temsilini döndürür."""
+        return f"<Transaction(id={self.id}, amount={self.amount}, type={self.type})>"
+    
+    def to_dict(self):
+        """Transaction'ı sözlük olarak döndürür."""
         return {
             "id": self.id,
+            "user_id": self.user_id,
             "amount": self.amount,
-            "category": self.category,  # Zaten string
             "description": self.description,
-            "date": self.date.strftime("%Y-%m-%d"),
-            "transaction_type": self.transaction_type.value
-        }
-    
-    @classmethod
-    def from_dict(cls, data: dict) -> "Transaction":
-        return cls(
-            id=data.get("id"),
-            amount=float(data["amount"]),
-            category=data["category"],  # Doğrudan string olarak kullan
-            description=data["description"],
-            date=datetime.strptime(data["date"], "%Y-%m-%d"),
-            transaction_type=next(t for t in TransactionType if t.value == data["transaction_type"])
-        ) 
+            "date": self.date.isoformat() if self.date else None,
+            "type": self.type,
+            "category_id": self.category_id,
+            "goal_id": self.goal_id,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "category_name": self.category.name if self.category else None
+        } 

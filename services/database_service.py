@@ -114,40 +114,59 @@ class DatabaseService:
         self, 
         user_id: int, 
         page: int = 1, 
-        per_page: int = 50,
+        per_page: int = 10,
+        transaction_type: Optional[str] = None,
+        category: Optional[str] = None,
+        min_amount: Optional[float] = None,
+        max_amount: Optional[float] = None,
         start_date: Optional[date] = None,
         end_date: Optional[date] = None,
-        transaction_type: Optional[str] = None,
-        category: Optional[str] = None
+        source_filter: Optional[str] = None,
+        days_back: Optional[int] = None
     ) -> Dict:
-        """Kullanıcının işlemlerini getirir."""
+        """
+        Kullanıcının işlemlerini getirir.
+        """
+        # Toplam işlem sayısı
         query = self.db.query(Transaction).filter(Transaction.user_id == user_id)
         
-        # Filtreleri uygula
-        if start_date:
-            query = query.filter(Transaction.date >= start_date)
-        if end_date:
-            query = query.filter(Transaction.date <= end_date)
+        # Filtreleme
         if transaction_type:
             query = query.filter(Transaction.type == transaction_type)
         if category:
             query = query.filter(Transaction.category == category)
+        if min_amount is not None:
+            query = query.filter(Transaction.amount >= min_amount)
+        if max_amount is not None:
+            query = query.filter(Transaction.amount <= max_amount)
+        if start_date:
+            query = query.filter(Transaction.date >= start_date)
+        if end_date:
+            query = query.filter(Transaction.date <= end_date)
+        if source_filter:
+            query = query.filter(Transaction.source.like(f"{source_filter}%"))
+        if days_back:
+            past_date = datetime.now().date() - timedelta(days=days_back)
+            query = query.filter(Transaction.date >= past_date)
+            
+        total_transactions = query.count()
         
-        # Toplam sayfa sayısını hesapla
-        total_count = query.count()
-        total_pages = (total_count + per_page - 1) // per_page
+        # Toplam sayfa sayısı
+        total_pages = (total_transactions + per_page - 1) // per_page
         
-        # Sayfalama uygula
-        transactions = query.order_by(Transaction.date.desc())\
-            .offset((page - 1) * per_page)\
-            .limit(per_page)\
-            .all()
+        # İşlemleri getir
+        transactions = query.order_by(
+            Transaction.date.desc()
+        ).offset(
+            (page - 1) * per_page
+        ).limit(per_page).all()
         
         return {
             "transactions": transactions,
-            "total_count": total_count,
-            "total_pages": total_pages,
-            "current_page": page
+            "total": total_transactions,
+            "page": page,
+            "per_page": per_page,
+            "total_pages": total_pages
         }
 
     @lru_cache(maxsize=100)
@@ -421,3 +440,19 @@ class DatabaseService:
         except Exception as e:
             self.db.rollback()
             raise e 
+
+    def get_user_transaction_categories(self, user_id: int) -> List[str]:
+        """
+        Kullanıcının tüm işlem kategorilerini getirir.
+        
+        Args:
+            user_id: Kullanıcı ID'si
+            
+        Returns:
+            Benzersiz kategorilerin listesi
+        """
+        categories = self.db.query(Transaction.category).filter(
+            Transaction.user_id == user_id
+        ).distinct().all()
+        
+        return [category[0] for category in categories] 

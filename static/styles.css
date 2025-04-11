@@ -1,0 +1,186 @@
+/* Ana tema renkleri */
+:root {
+    --primary-color: #3498db;
+    --secondary-color: #2ecc71;
+    --accent-color: #f39c12;
+    --danger-color: #e74c3c;
+    --text-color: #2c3e50;
+    --light-bg: #f8f9fa;
+    --dark-bg: #343a40;
+    --card-border-radius: 10px;
+    --button-border-radius: 5px;
+}
+
+/* Genel stil düzenlemeleri */
+.main {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    color: var(--text-color);
+}
+
+/* Başlık stilleri */
+h1, h2, h3 {
+    font-weight: 600;
+    color: var(--text-color);
+}
+
+h1 {
+    font-size: 2.5rem;
+    margin-bottom: 1.5rem;
+}
+
+/* Kartlar ve containerlar için stiller */
+.stCard {
+    border-radius: var(--card-border-radius) !important;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1) !important;
+    padding: 1.5rem !important;
+    border: none !important;
+    background-color: white !important;
+    margin-bottom: 1.5rem !important;
+}
+
+.card-container {
+    background-color: white;
+    border-radius: var(--card-border-radius);
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    padding: 1.5rem;
+    margin-bottom: 1.5rem;
+}
+
+/* Butonlar için stiller */
+.stButton button {
+    border-radius: var(--button-border-radius) !important;
+    font-weight: 500 !important;
+    padding: 0.5rem 1rem !important;
+    transition: all 0.3s ease !important;
+}
+
+.stButton button:hover {
+    transform: translateY(-2px) !important;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1) !important;
+}
+
+/* Primary buton */
+.primary-btn button {
+    background-color: var(--primary-color) !important;
+    color: white !important;
+}
+
+/* Secondary buton */
+.secondary-btn button {
+    background-color: var(--secondary-color) !important;
+    color: white !important;
+}
+
+/* Danger buton */
+.danger-btn button {
+    background-color: var(--danger-color) !important;
+    color: white !important;
+}
+
+/* İşlem kartları için stil */
+.transaction-card {
+    display: flex;
+    padding: 1rem;
+    border-radius: var(--card-border-radius);
+    margin-bottom: 0.75rem;
+    transition: all 0.3s ease;
+}
+
+.transaction-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+}
+
+.transaction-card.income {
+    border-left: 4px solid var(--secondary-color);
+}
+
+.transaction-card.expense {
+    border-left: 4px solid var(--danger-color);
+}
+
+/* DataFrames için stil */
+.dataframe-container {
+    border-radius: var(--card-border-radius);
+    overflow: hidden;
+}
+
+/* Sidebar stilleri */
+.sidebar .sidebar-content {
+    background-color: var(--light-bg);
+}
+
+/* Metrik kartları için stil */
+.metric-card {
+    background-color: white;
+    border-radius: var(--card-border-radius);
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    padding: 1.5rem;
+    text-align: center;
+    margin-bottom: 1rem;
+}
+
+.metric-card h3 {
+    font-size: 1.2rem;
+    margin-bottom: 0.5rem;
+}
+
+.metric-card p.value {
+    font-size: 2rem;
+    font-weight: 700;
+    margin-bottom: 0;
+    color: var(--primary-color);
+}
+
+.metric-card p.trend {
+    font-size: 0.9rem;
+    margin-top: 0.5rem;
+}
+
+.metric-card p.trend.positive {
+    color: var(--secondary-color);
+}
+
+.metric-card p.trend.negative {
+    color: var(--danger-color);
+}
+
+/* Responsive düzenlemeler */
+@media (max-width: 768px) {
+    h1 {
+        font-size: 2rem;
+    }
+    
+    .metric-card p.value {
+        font-size: 1.5rem;
+    }
+}
+
+/* Custom tooltip */
+.tooltip {
+    position: relative;
+    display: inline-block;
+    cursor: pointer;
+}
+
+.tooltip .tooltip-text {
+    visibility: hidden;
+    width: 200px;
+    background-color: var(--dark-bg);
+    color: white;
+    text-align: center;
+    border-radius: 6px;
+    padding: 10px;
+    position: absolute;
+    z-index: 1;
+    bottom: 125%;
+    left: 50%;
+    margin-left: -100px;
+    opacity: 0;
+    transition: opacity 0.3s;
+}
+
+.tooltip:hover .tooltip-text {
+    visibility: visible;
+    opacity: 1;
+} 
